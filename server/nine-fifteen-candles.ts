@@ -4489,13 +4489,18 @@ export async function ensureNineFifteenPayload(
   }
 
   /**
-   * A rebuild is minutes of CPU and a few hundred Kite history calls. It runs in a niced child
-   * now so it cannot stall the live 9:16 bot, but it would still compete for a small host's CPU
-   * and rate limit, so expired-but-valid bytes are served as-is until the close — they only lack
-   * today's session, which a 1-year study barely moves. An explicit refresh still rebuilds.
+   * A rebuild is minutes of CPU, hundreds of Kite calls, and ~384–1024 MB in a child process. On
+   * a 2 GB host that also runs the live bot, never start one during market hours unless the user
+   * explicitly hits Refresh (`force`). Serve whatever is on disk (even if the day range is
+   * shorter than requested) so the UI stays usable.
    */
-  if (meta && !force && cacheCoversRequest(meta) && isMarketHoursIst()) {
-    return { gzipPath: payloadFile(profile), builtAt: meta.at };
+  if (!force && isMarketHoursIst()) {
+    if (meta) {
+      return { gzipPath: payloadFile(profile), builtAt: meta.at };
+    }
+    throw new Error(
+      "Backtest cache is not built yet — try again after 15:30 IST (market closed) so the server is not overloaded during live trading.",
+    );
   }
 
   let inflight = inflightRebuild.get(profile.id);

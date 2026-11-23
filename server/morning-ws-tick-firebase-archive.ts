@@ -244,7 +244,48 @@ export async function readArchivedMorningTickRows(dateIst: string): Promise<RawT
     const parsed = JSON.parse(part) as RawTickRow[];
     if (Array.isArray(parsed)) rows.push(...parsed);
   }
-  return rows;
+  return rows.length > 0 ? rows : null;
+}
+
+/** Same 09:15–09:20 window as Firestore, copied to Cloud Storage when the bucket exists. */
+export async function readArchivedMorningTickRowsFromStorage(
+  dateIst: string,
+): Promise<RawTickRow[] | null> {
+  const bucket = getAdminStorageBucket();
+  if (!bucket) return null;
+  const storagePath = `${STORAGE_PREFIX}/${dateIst}/0915-0920.jsonl`;
+  try {
+    const file = bucket.file(storagePath);
+    const [exists] = await file.exists();
+    if (!exists) return null;
+    const [buf] = await file.download();
+    const rows: RawTickRow[] = [];
+    for (const line of buf.toString("utf-8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        rows.push(JSON.parse(trimmed) as RawTickRow);
+      } catch {
+        /* skip */
+      }
+    }
+    return rows.length > 0 ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function listArchivedMorningTickDates(): Promise<string[]> {
+  const fromIndex = Object.keys(loadUploadIndex().byDate).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  const db = getAdminFirestore();
+  if (!db) return fromIndex.sort();
+  try {
+    const refs = await db.collection(FIRESTORE_COLLECTION).listDocuments();
+    const fromDb = refs.map((ref) => ref.id).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    return [...new Set([...fromIndex, ...fromDb])].sort();
+  } catch {
+    return fromIndex.sort();
+  }
 }
 
 async function runScheduledUpload(reason: string): Promise<void> {

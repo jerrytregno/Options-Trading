@@ -71,4 +71,6 @@ export interface BotTradeLog {
   exitTimeIst?: string | null;
   /** Filled in by the Zerodha tradebook reconcile pass; absent until it runs. */
   broker?: BrokerTradeSummary | null;
+  /** Simulated fills on the server paper book — not sent to Zerodha. */
+  isPaper?: boolean;
 }

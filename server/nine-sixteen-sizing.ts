@@ -1,5 +1,6 @@
 import { roundToOptionTick } from "../src/lib/kite-orders.js";
 import { fetchEquityAvailableBalance, fetchOptionLtp } from "./kite-client.js";
+import { PAPER_TRADING, paperCash } from "./paper-book.js";
 
 /** Gap between the two /quote reads — Kite allows one request per second. */
 export const NINE_SIXTEEN_ENTRY_LTP_CONFIRM_DELAY_MS = 1000;
@@ -178,7 +179,7 @@ export async function resolveEntryQuantity(
   costPerLot: number;
   usableBalance: number;
 }> {
-  const availableBalance = await fetchEquityAvailableBalance(accessToken);
+  const availableBalance = PAPER_TRADING ? paperCash() : await fetchEquityAvailableBalance(accessToken);
   const { lots, costPerLot, usableBalance } = computeAffordableLots({
     availableBalance,
     lotSize,

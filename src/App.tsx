@@ -4,8 +4,10 @@ import NineFifteenPage from "@/pages/NineFifteenPage";
 import BacktestingPage from "@/pages/BacktestingPage";
 import NineSixteenGreenBacktestPage from "@/pages/NineSixteenGreenBacktestPage";
 import PortfolioPage from "@/pages/PortfolioPage";
+import PaperPortfolioPage from "@/pages/PaperPortfolioPage";
 import SettingsPage from "@/pages/SettingsPage";
 import TradePage from "@/pages/TradePage";
+import PaperTradePage from "@/pages/PaperTradePage";
 import LogTestPage from "@/pages/LogTestPage";
 import NineFifteenBacktestPage from "@/pages/NineFifteenBacktestPage";
 import NiftyOneHourBacktestPage from "@/pages/NiftyOneHourBacktestPage";
@@ -29,7 +31,9 @@ export default function App() {
       <Route path="/dashboard/win-backtest" element={<WinBacktestPage />} />
       <Route path="/dashboard/log-test" element={<LogTestPage />} />
       <Route path="/dashboard/trades" element={<TradePage />} />
+      <Route path="/dashboard/paper-trades" element={<PaperTradePage />} />
       <Route path="/dashboard/portfolio" element={<PortfolioPage />} />
+      <Route path="/dashboard/paper-portfolio" element={<PaperPortfolioPage />} />
       <Route path="/dashboard/settings" element={<SettingsPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

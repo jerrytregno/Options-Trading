@@ -73,6 +73,8 @@ interface BotStatus {
   pnlTrailArmPct?: number;
   pnlTrailStepPct?: number;
   nineFifteenEnabled?: boolean;
+  paperTrading?: boolean;
+  paperCash?: number | null;
   tradeSlot?: "nine-fifteen" | "nine-sixteen";
   nineFifteenMarkPrice?: number | null;
   nineFifteenMarkAt?: string | null;
@@ -303,6 +305,11 @@ export function ServerNineSixteenBotPanel({ connected: _connected }: { connected
             <RefreshCw size={14} />
           </button>
           <span className="pat-badge pat-badge--on">9:15 always on</span>
+          {status.paperTrading ? (
+            <span className="pat-badge pat-badge--on">
+              Paper {formatCurrency(status.paperCash ?? 0)}
+            </span>
+          ) : null}
           <span className={cn("pat-badge", status.enabled ? "pat-badge--on" : "pat-badge--off")}>
             {status.enabled ? "9:16 armed" : "9:16 off"}
           </span>
@@ -311,8 +318,9 @@ export function ServerNineSixteenBotPanel({ connected: _connected }: { connected
 
       {tradingDisabled && (
         <div className="ms-bot-warn ms-bot-warn--hold">
-          <strong>9:16 entries are disabled on the server.</strong> Only the 9:15 trade runs — websocket tick
-          capture and per-second samples stay active.
+          <strong>9:16 entries are disabled on the server.</strong> Only the 9:15 trade runs
+          {status.paperTrading ? " (paper book — no live Kite orders)" : ""} — websocket tick capture and
+          per-second samples stay active.
         </div>
       )}
 
@@ -899,10 +907,10 @@ export function ServerNineSixteenBotPanel({ connected: _connected }: { connected
       )}
 
       <p className="pat-idle-note text-muted">
-        <strong>9:15 trade</strong> (always on server): first tick at 9:15:00 = open; last tick before 9:15:10 vs
-        open. Opened down and still falling by <strong>15 pts</strong> → <strong>NRML market BUY</strong> ATM PE ·
-        opened up and still rising by <strong>15 pts</strong> → ATM CE at 9:15:11. Opposite gap, or a move under 15,
-        skips. Exit at <strong>15 Nifty points</strong> from the 9:15:11 price. P&amp;L <strong>−15%</strong> and the{" "}
+        <strong>9:15 trade</strong> (always on server): first tick at 9:15:00 = open. Yesterday{" "}
+        <strong>15:29</strong> green → open ≥ <strong>+1</strong> vs that close; red → ≤ <strong>−1</strong>.
+        Last tick before 9:15:10 vs open, same direction as gap vs <strong>15:30 close</strong>, and |10s move| ≥{" "}
+        <strong>15 pts</strong> → PE or CE <strong>NRML market BUY</strong> at 9:15:11. Any filter fails → skip. Exit at <strong>15 Nifty points</strong> from the 9:15:11 price. P&amp;L <strong>−15%</strong> and the{" "}
         <strong>SL-M at −20%</strong> still protect the leg.{" "}
         <strong>open stop</strong> — PE if Nifty goes above the 9:15 open, CE if it goes below;
         from <strong>9:15:57</strong> if not in profit and Nifty ≥15 pts against vs open → market exit for{" "}

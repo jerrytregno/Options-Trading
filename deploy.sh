@@ -33,13 +33,15 @@ mkdir -p data
 rm -rf data/sensex-nine-fifteen-cache* data/sensex-nine-fifteen-cache-rows 2>/dev/null || true
 
 if pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
-  echo "==> pm2 restart $PM2_NAME"
-  pm2 restart "$PM2_NAME"
-else
-  echo "==> pm2 start $PM2_NAME"
-  pm2 start npm --name "$PM2_NAME" -- start
-  pm2 save
+  echo "==> pm2 restart $PM2_NAME (ecosystem — capped heaps)"
+  pm2 delete "$PM2_NAME" 2>/dev/null || true
 fi
+if [[ -f ecosystem.config.cjs ]]; then
+  pm2 start ecosystem.config.cjs
+else
+  pm2 start npm --name "$PM2_NAME" -- start
+fi
+pm2 save
 
 echo "==> Done at $(date -Iseconds)"
 pm2 status "$PM2_NAME"

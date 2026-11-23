@@ -1,0 +1,40 @@
+# Deploy to AWS Lightsail on push to main or manual "Run workflow".
+# One-time setup: GitHub repo → Settings → Secrets → Actions:
+#   LIGHTSAIL_HOST     = 13.206.140.159  (your static IP)
+#   LIGHTSAIL_SSH_KEY  = full contents of LightsailDefaultKey-ap-south-1.pem
+name: Deploy Lightsail
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-lightsail
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.repository == 'jerrytregno/Options-Trading'
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script_stop: true
+          command_timeout: 25m
+          script: |
+            set -euo pipefail
+            APP=~/Options-Trading
+            if [[ ! -d "$APP/.git" ]]; then
+              echo "Cloning repo (first run)…"
+              git clone https://github.com/jerrytregno/Options-Trading.git "$APP"
+            fi
+            cd "$APP"
+            git fetch origin main
+            git reset --hard origin/main
+            chmod +x deploy.sh
+            GIT_PULL=0 ./deploy.sh

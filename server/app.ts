@@ -28,6 +28,14 @@ import {
   setNineSixteenBotEnabled,
 } from "./nine-sixteen-bot.js";
 import {
+  buildPaperPortfolioSnapshot,
+  listPaperTradeLogs,
+  listPaperTradeLogsForDisplay,
+} from "./paper-portfolio.js";
+import { PAPER_TRADING } from "./paper-book.js";
+import { ensurePaperWsBacktest } from "./nine-fifteen-ws-backtest.js";
+import { ensurePaperWsGapV2Backtest } from "./paper-ws-gap-v2-backtest.js";
+import {
   ensureHighMinus5Backtest,
   NINE_FIFTEEN_HIGH_MINUS5_DEFAULT_DAYS,
 } from "./nine-fifteen-high-minus5-backtest.js";
@@ -882,6 +890,77 @@ app.get("/api/trades", async (_req, res) => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load trade logs";
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/paper/portfolio", async (_req, res) => {
+  try {
+    const data = await buildPaperPortfolioSnapshot();
+    return res.json({ data, meta: { paperTrading: PAPER_TRADING } });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load paper portfolio";
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/paper/trades", async (req, res) => {
+  try {
+    const wsReplay = req.query.wsReplay === "1" || req.query.wsReplay === "true";
+    const accessToken = wsReplay ? kiteAccessTokenForMarketData(req) : null;
+    const { trades, updatedAt } = wsReplay
+      ? await listPaperTradeLogsForDisplay(accessToken, { wsReplay: true })
+      : await listPaperTradeLogs();
+    return res.json({
+      data: trades,
+      meta: { updatedAt, paperTrading: PAPER_TRADING, wsReplay },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load paper trades";
+    return res.status(500).json({ error: message });
+  }
+});
+
+function kiteAccessTokenForMarketData(req: express.Request): string | null {
+  const cookieToken = req.cookies[TOKEN_COOKIE] as string | undefined;
+  const storedToken = loadKiteSession()?.accessToken;
+  return cookieToken ?? storedToken ?? null;
+}
+
+app.get("/api/paper/ws-backtest", async (req, res) => {
+  try {
+    const accessToken = kiteAccessTokenForMarketData(req);
+    const q = req.query.skip329Gap;
+    const skipPrev329Gap = q === "1" || q === "true";
+    const data = await ensurePaperWsBacktest(accessToken, { skipPrev329Gap });
+    return res.json({
+      data,
+      meta: {
+        paperTrading: PAPER_TRADING,
+        kiteForPrevDay: Boolean(accessToken),
+        skipPrev329Gap,
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to run websocket backtest";
+    return res.status(500).json({ error: message });
+  }
+});
+
+app.get("/api/paper/ws-backtest-v2", async (req, res) => {
+  try {
+    const accessToken = kiteAccessTokenForMarketData(req);
+    const data = await ensurePaperWsGapV2Backtest(accessToken);
+    return res.json({
+      data,
+      meta: {
+        paperTrading: PAPER_TRADING,
+        kiteForPrevDay: Boolean(accessToken),
+        variant: "gap-open-v2",
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to run Paper trades v2 backtest";
     return res.status(500).json({ error: message });
   }
 });

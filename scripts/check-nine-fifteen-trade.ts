@@ -74,24 +74,45 @@ function ist(h: number, m: number, s: number, ms = 0): number {
 }
 
 console.log("\n--- gap and the 10-second move must point the same way, and the move is 15 ---");
-check("opened down and fell 15 buys PE", decideNineFifteenEntry(24_800, 24_785, 24_820), {
+const red329 = { open: 24_840, close: 24_820 };
+const green329 = { open: 24_760, close: 24_780 };
+check("opened down and fell 15 buys PE", decideNineFifteenEntry(24_800, 24_785, 24_820, red329), {
   action: "enter",
   leg: "PE_BUY",
   movePts: 15,
 });
-check("opened up and rose 15 buys CE", decideNineFifteenEntry(24_800, 24_815, 24_780), {
+check("opened up and rose 15 buys CE", decideNineFifteenEntry(24_800, 24_815, 24_780, green329), {
   action: "enter",
   leg: "CE_BUY",
   movePts: 15,
 });
-check("14.9 pts down is skipped", decideNineFifteenEntry(24_800, 24_785.1, 24_820).action, "skip");
-check("opened up but the 10s fell is skipped", decideNineFifteenEntry(24_800, 24_780, 24_780).action, "skip");
-check("opened down but the 10s rose is skipped", decideNineFifteenEntry(24_800, 24_820, 24_820).action, "skip");
-check("a flat gap is skipped", decideNineFifteenEntry(24_800, 24_780, 24_800).action, "skip");
-check("flat at 10s is skipped", decideNineFifteenEntry(24_800, 24_800, 24_820).action, "skip");
-check("a missing yesterday close is skipped", decideNineFifteenEntry(24_800, 24_780, null).action, "skip");
-check("a missing open is skipped", decideNineFifteenEntry(0, 24_790, 24_820).action, "skip");
-check("a missing read is skipped", decideNineFifteenEntry(24_800, 0, 24_820).action, "skip");
+check("14.9 pts down is skipped", decideNineFifteenEntry(24_800, 24_785.1, 24_820, red329).action, "skip");
+check("opened up but the 10s fell is skipped", decideNineFifteenEntry(24_800, 24_780, 24_780, green329).action, "skip");
+check("opened down but the 10s rose is skipped", decideNineFifteenEntry(24_800, 24_820, 24_820, { open: 24_830, close: 24_810 }).action, "skip");
+check("a flat gap is skipped", decideNineFifteenEntry(24_800, 24_780, 24_800, { open: 24_830, close: 24_810 }).action, "skip");
+check("flat at 10s is skipped", decideNineFifteenEntry(24_800, 24_800, 24_820, red329).action, "skip");
+check("a missing yesterday close is skipped", decideNineFifteenEntry(24_800, 24_780, null, red329).action, "skip");
+check("a missing open is skipped", decideNineFifteenEntry(0, 24_790, 24_820, red329).action, "skip");
+check("a missing read is skipped", decideNineFifteenEntry(24_800, 0, 24_820, red329).action, "skip");
+check("a missing 15:29 candle is skipped", decideNineFifteenEntry(24_800, 24_785, 24_820, null).action, "skip");
+check("a flat 15:29 candle is skipped", decideNineFifteenEntry(24_800, 24_785, 24_820, { open: 24_820, close: 24_820 }).action, "skip");
+check("green 15:29 and a +1 open buys CE", decideNineFifteenEntry(24_800, 24_815, 24_780, { open: 24_770, close: 24_799 }), {
+  action: "enter",
+  leg: "CE_BUY",
+  movePts: 15,
+});
+check("green 15:29 and a +0.9 open is skipped", decideNineFifteenEntry(24_800, 24_815, 24_780, { open: 24_770, close: 24_799.1 }).action, "skip");
+check("red 15:29 and a −1 open buys PE", decideNineFifteenEntry(24_800, 24_785, 24_820, { open: 24_830, close: 24_801 }), {
+  action: "enter",
+  leg: "PE_BUY",
+  movePts: 15,
+});
+check("red 15:29 and a −0.9 open is skipped", decideNineFifteenEntry(24_800, 24_785, 24_820, { open: 24_830, close: 24_800.9 }).action, "skip");
+check("skip329Gap allows CE when 15:29 gap fails", decideNineFifteenEntry(24_800, 24_815, 24_780, { open: 24_770, close: 24_799.5 }, { skipPrev329Gap: true }), {
+  action: "enter",
+  leg: "CE_BUY",
+  movePts: 15,
+});
 check("PE exits 15 pts under the fill", shouldExitNineFifteenIndexTarget("PE_BUY", 24_000, 23_985), true);
 check("PE holds 14.9 pts under the fill", shouldExitNineFifteenIndexTarget("PE_BUY", 24_000, 23_985.1), false);
 check("CE exits 15 pts over the fill", shouldExitNineFifteenIndexTarget("CE_BUY", 24_000, 24_015), true);

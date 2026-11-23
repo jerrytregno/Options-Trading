@@ -152,12 +152,20 @@ export const NINE_SIXTEEN_PRE_RESOLVE_SEC = 9 * 3600 + 15 * 60 + 58;
 /**
  * The 9:15 trade — a separate, earlier leg that runs before the 9:16 one.
  *
- * The 9:15 minute is read ten seconds in. Both the gap and that move must point the same way,
- * and the move must already be 15 points. Entry is 9:15:11. Exit is 15 Nifty points from that fill.
+ * The 9:15 minute is read ten seconds in. Yesterday's 15:29 candle must gap the open by 1 point
+ * in that candle's colour, the 15:30 gap and the 10-second move must point the same way, and the
+ * move must already be 15 points. Entry is 9:15:11. Exit is 15 Nifty points from that fill.
  */
 export const NINE_FIFTEEN_PRE_RESOLVE_SEC = 9 * 3600 + 15 * 60 + 4;
 /** 10-second move required, in the same direction as the gap from yesterday's 15:30 close. */
 export const NINE_FIFTEEN_SAME_DIRECTION_MIN_PTS = 15;
+/**
+ * Yesterday's 15:29 candle (the last full minute). Its colour sets the gap the next 9:15 open
+ * must already have versus that candle's close.
+ */
+export const NINE_FIFTEEN_PREV_CANDLE_MINUTE = 15 * 60 + 29;
+/** Green 15:29 → 9:15 opens at least this far above its close. Red → at least this far below. */
+export const NINE_FIFTEEN_PREV_CANDLE_MIN_GAP_PTS = 1;
 /** Take-profit from the Nifty price at the 9:15:11 fill. PE down, CE up. */
 export const NINE_FIFTEEN_INDEX_EXIT_PTS = 15;
 /** @deprecated Entry is the 15-point same-direction rule. Kept for older imports. */
@@ -587,19 +595,74 @@ export type NineFifteenEntryDecision =
   | { action: "enter"; leg: TradeLeg; movePts: number }
   | { action: "skip"; reason: string };
 
+/** Yesterday's 15:29 minute. Colour is close versus open. The close is the gap reference. */
+export type NineFifteenPrevCandle = {
+  open: number;
+  close: number;
+};
+
+export function nineFifteenPrevCandleColour(
+  candle: NineFifteenPrevCandle | null,
+): "green" | "red" | "flat" | "missing" {
+  if (!candle || !(candle.open > 0) || !(candle.close > 0)) return "missing";
+  if (candle.close > candle.open) return "green";
+  if (candle.close < candle.open) return "red";
+  return "flat";
+}
+
 /**
- * 9:15 entry. Yesterday's 15:30 close and the first 10 seconds must point the same way,
- * and that 10-second move must already be 15 points.
+ * The 9:15 open against yesterday's 15:29 close.
+ * A green candle needs the open at least 1 point above that close.
+ * A red candle needs the open at least 1 point below it.
+ */
+export function nineFifteenPrevCandleGapSkipReason(
+  open: number,
+  candle: NineFifteenPrevCandle | null,
+): string | null {
+  const colour = nineFifteenPrevCandleColour(candle);
+  if (colour === "missing" || !candle) {
+    return "No yesterday 15:29 candle — the 1-point gap cannot be checked";
+  }
+  if (colour === "flat") {
+    return "Yesterday 15:29 candle is flat (close equals open) — no trade";
+  }
+  const gap = open - candle.close;
+  const min = NINE_FIFTEEN_PREV_CANDLE_MIN_GAP_PTS;
+  const signed = `${gap >= 0 ? "+" : ""}${gap.toFixed(2)}`;
+  if (colour === "green" && gap + 1e-9 < min) {
+    return `Yesterday 15:29 was green · 9:15 open is ${signed} vs its close ${candle.close.toFixed(2)} (need ≥ +${min})`;
+  }
+  if (colour === "red" && -gap + 1e-9 < min) {
+    return `Yesterday 15:29 was red · 9:15 open is ${signed} vs its close ${candle.close.toFixed(2)} (need ≤ −${min})`;
+  }
+  return null;
+}
+
+/**
+ * 9:15 entry. Yesterday's 15:29 candle must already gap the open by 1 point in its own
+ * colour, yesterday's 15:30 close and the first 10 seconds must point the same way, and
+ * that 10-second move must already be 15 points.
  *
  * Opened down and still falling → PE. Opened up and still rising → CE.
  */
+export type NineFifteenEntryOptions = {
+  /** Paper backtest only — skip green/red 15:29 ±1 pt gap vs that candle close. */
+  skipPrev329Gap?: boolean;
+};
+
 export function decideNineFifteenEntry(
   open: number,
   markPrice: number,
   prevClose: number | null,
+  prevCandle: NineFifteenPrevCandle | null,
+  options?: NineFifteenEntryOptions,
 ): NineFifteenEntryDecision {
   if (!(open > 0) || !(markPrice > 0)) {
     return { action: "skip", reason: "No 9:15 open or 10-second tick to read" };
+  }
+  if (!options?.skipPrev329Gap) {
+    const candleSkip = nineFifteenPrevCandleGapSkipReason(open, prevCandle);
+    if (candleSkip) return { action: "skip", reason: candleSkip };
   }
   if (prevClose == null || !(prevClose > 0)) {
     return { action: "skip", reason: "No yesterday 15:30 close — the gap cannot be matched" };

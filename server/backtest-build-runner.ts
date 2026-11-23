@@ -7,7 +7,8 @@ import { fileURLToPath } from "url";
  * happily grows into swap before it collects; a hard cap makes it collect instead. Slower builds
  * are the trade, which is the right way round on a host that also runs a live trading bot.
  */
-const DEFAULT_HEAP_MB = 1024;
+/** 384 MB fits a 2 GB Lightsail box alongside the API (~384 MB) and the live bot. Override via BACKTEST_BUILD_HEAP_MB. */
+const DEFAULT_HEAP_MB = 384;
 /** Build work always yields to the API and the live bot. */
 const NICENESS = "10";
 

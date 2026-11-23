@@ -28,6 +28,10 @@ rsync -avz --delete --progress \
   --exclude .env.local \
   --exclude .env \
   --exclude data/kite-session.json \
+  --exclude data/paper-account.json \
+  --exclude data/paper-ws-backtest.json \
+  --exclude data/paper-ws-backtest-no-329.json \
+  --exclude data/paper-ws-gap-v2-backtest.json \
   --exclude data/bot-trade-logs.json \
   --exclude 'data/*nine-fifteen-cache*' \
   --exclude data/nine-sixteen-capture.json \

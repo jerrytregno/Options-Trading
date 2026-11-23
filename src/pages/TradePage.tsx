@@ -173,12 +173,14 @@ function BrokerFillsBlock({ trade }: { trade: BotTradeLog }) {
   );
 }
 
-function TradeDetailPanel({
+export function TradeDetailPanel({
   trade,
   afterCharges,
+  paperMode = false,
 }: {
   trade: BotTradeLog;
   afterCharges: boolean;
+  paperMode?: boolean;
 }) {
   const charges = afterCharges ? tradeCharges(trade) : null;
   const gross = tradeGrossPnl(trade);
@@ -252,7 +254,7 @@ function TradeDetailPanel({
             })()}
           </span>
         </div>
-        {charges && gross != null && net != null && (
+        {!paperMode && charges && gross != null && net != null && (
           <div className="trade-charges-block">
             <span className="trade-detail-label">Charges (Zerodha estimate)</span>
             <div className="trade-charges-grid">
@@ -297,7 +299,12 @@ function TradeDetailPanel({
         </div>
       </div>
 
-      <BrokerFillsBlock trade={trade} />
+      {!paperMode && <BrokerFillsBlock trade={trade} />}
+      {paperMode && (
+        <p className="trade-broker-empty text-muted text-sm">
+          Simulated fill on the server paper book — no Zerodha order was placed.
+        </p>
+      )}
 
       {(trade.status === "skipped" || trade.status === "no_entry") && (
         <p className="trade-skip-banner">{trade.message}</p>
@@ -328,16 +335,18 @@ function TradeDetailPanel({
   );
 }
 
-function TradeLogsTable({
+export function TradeLogsTable({
   rows,
   expandedId,
   onToggle,
   afterCharges,
+  paperMode = false,
 }: {
   rows: BotTradeLog[];
   expandedId: string | null;
   onToggle: (id: string) => void;
   afterCharges: boolean;
+  paperMode?: boolean;
 }) {
   return (
     <div className="table-wrap">
@@ -428,7 +437,7 @@ function TradeLogsTable({
                 {expanded && (
                   <tr className="trade-detail-row">
                     <td colSpan={12}>
-                      <TradeDetailPanel trade={trade} afterCharges={afterCharges} />
+                      <TradeDetailPanel trade={trade} afterCharges={afterCharges} paperMode={paperMode} />
                     </td>
                   </tr>
                 )}

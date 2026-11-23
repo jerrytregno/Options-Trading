@@ -33,9 +33,11 @@ export default function NineFifteenPage() {
             <div className="nf-live-rules-col">
               <h3 className="nf-live-rules-heading">9:15 trade · PE or CE at 9:15:11</h3>
               <p className="nf-live-rules-lead text-muted">
-                Enter at 9:15:11 only when yesterday's close and the first 10 seconds point the same way, and
-                that move is already 15 points. Opened down and still falling buys ATM PE. Opened up and still
-                rising buys ATM CE. Exit when Nifty has moved <strong>15 points</strong> from the 9:15:11 price.
+                Enter at 9:15:11 only when yesterday&apos;s <strong>15:29</strong> candle already gaps the open by{" "}
+                <strong>1 Nifty point</strong> in its colour, yesterday&apos;s <strong>15:30 close</strong> and the
+                first 10 seconds point the same way, and that 10-second move is already{" "}
+                <strong>15 points</strong>. Opened down and still falling buys ATM PE. Opened up and still rising
+                buys ATM CE. Exit when Nifty has moved <strong>15 points</strong> from the 9:15:11 price.
               </p>
               <h4 className="nf-live-rules-subheading">Entry</h4>
               <ol className="nf-live-rules-list">
@@ -44,19 +46,35 @@ export default function NineFifteenPage() {
                   <strong>9:15:00</strong>.
                 </li>
                 <li>
-                  <strong>Read direction at 9:15:10</strong> — last tick strictly before 10 seconds vs that open,
-                  and compare the open with yesterday's 15:30 close.
+                  <strong>15:29 candle gap (1 pt)</strong> — yesterday&apos;s last full minute before the close
+                  sets the minimum open:
                   <ul className="nf-live-rules-sublist">
                     <li>
-                      Opened down, and the first 10 seconds kept falling by <strong>15 points or more</strong> →{" "}
-                      <strong>ATM PE</strong> at <strong>9:15:11</strong>
+                      <strong>Green 15:29</strong> → 9:15 open must be at least <strong>1 point above</strong> that
+                      candle&apos;s close
                     </li>
                     <li>
-                      Opened up, and the first 10 seconds kept rising by <strong>15 points or more</strong> →{" "}
-                      <strong>ATM CE</strong> at <strong>9:15:11</strong>
+                      <strong>Red 15:29</strong> → 9:15 open must be at least <strong>1 point below</strong> that
+                      candle&apos;s close
+                    </li>
+                    <li>Flat or missing 15:29 → no 9:15 trade</li>
+                  </ul>
+                </li>
+                <li>
+                  <strong>Read direction at 9:15:10</strong> — last tick strictly before 10 seconds vs that open,
+                  compared with yesterday&apos;s <strong>15:30 close</strong> (same-direction gap, not a 10-point
+                  minimum on this leg):
+                  <ul className="nf-live-rules-sublist">
+                    <li>
+                      Opened down vs 15:30 close, and the first 10 seconds kept falling by{" "}
+                      <strong>15 points or more</strong> → <strong>ATM PE</strong> at <strong>9:15:11</strong>
                     </li>
                     <li>
-                      The gap and the 10-second move point opposite ways, or the move is under 15 points → no
+                      Opened up vs 15:30 close, and the first 10 seconds kept rising by{" "}
+                      <strong>15 points or more</strong> → <strong>ATM CE</strong> at <strong>9:15:11</strong>
+                    </li>
+                    <li>
+                      Gap vs 15:30 and the 10-second move point opposite ways, or the move is under 15 points → no
                       9:15 trade
                     </li>
                   </ul>
@@ -129,8 +147,9 @@ export default function NineFifteenPage() {
               </ol>
               <p className="nf-live-rules-foot text-muted">
                 When the 9:15 leg closes before 9:16:00, the 9:16 decision still runs at 9:16:00 unless the
-                9:15 trade is still open. If the 9:15 signal itself qualifies (same-direction gap and a 15-point
-                10-second move), the buy goes out at <strong>9:15:11</strong>. A tick in the second before that
+                9:15 trade is still open. If the 9:15 signal qualifies (15:29 gap ≥1 pt, same-direction gap vs
+                15:30, and a 15-point 10-second move), the buy goes out at <strong>9:15:11</strong>. A tick in the
+                second before that
                 order is not a missed trade. If that order does not fill, the 9:16 decision still runs.
               </p>
             </div>
