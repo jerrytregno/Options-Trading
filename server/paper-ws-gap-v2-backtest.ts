@@ -26,7 +26,7 @@ import {
 const CACHE_DIR = path.join(process.cwd(), "data");
 const CACHE_FILE = path.join(CACHE_DIR, "paper-ws-gap-v2-backtest.json");
 const CACHE_MS = 30 * 60 * 1000;
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const LOT_SIZE = 65;
 /** Minimum |first 9:15 open tick − previous session close| in Nifty points. */
 export const PAPER_GAP_V2_MIN_GAP_PTS = 10;
@@ -204,7 +204,12 @@ function replayGapV2Day(
 
 async function buildFreshV2(accessToken: string | null): Promise<PaperWsBacktestResult> {
   const dates = await listPaperWsTickDates();
-  const sessions = await loadPaperWsMinuteSessions(accessToken, dates).catch(() => new Map());
+  let sessionsError: string | null = null;
+  const sessions = await loadPaperWsMinuteSessions(accessToken, dates).catch((err: unknown) => {
+    sessionsError = err instanceof Error ? err.message : "Kite minute history unavailable";
+    console.error("[paper-trades-v2] minute sessions failed", err);
+    return new Map();
+  });
   const trades: PaperWsBacktestTrade[] = [];
   let cash = PAPER_STARTING_CASH;
 
@@ -238,7 +243,7 @@ async function buildFreshV2(accessToken: string | null): Promise<PaperWsBacktest
     endingCash: Math.round(cash * 100) / 100,
     closedPnl: Math.round(closedPnl * 100) / 100,
     builtAt: new Date().toISOString(),
-    note: `Paper trades v2 · first Nifty tick in 9:15:00–9:15:15 vs prev session 15:30 close: CE if ≥+${MIN_GAP_FROM_PREV_CLOSE_PTS} pts gap, PE if ≤−${MIN_GAP_FROM_PREV_CLOSE_PTS} · entry at that tick · Nifty TP +${V2_TP_INDEX_PTS} pts · Nifty SL −${V2_SL_INDEX_PTS} pts vs entry spot · option exit from archived LTP or ~${PAPER_WS_ATM_DELTA}× spot move`,
+    note: `${sessionsError ? `Prev-session 15:30 close could not be loaded from Kite (${sessionsError}) — connect Kite and Refresh. ` : !accessToken ? "Kite is not connected, so the prev-session 15:30 close is missing. " : ""}Paper trades v2 · first Nifty tick in 9:15:00–9:15:15 vs prev session 15:30 close: CE if ≥+${MIN_GAP_FROM_PREV_CLOSE_PTS} pts gap, PE if ≤−${MIN_GAP_FROM_PREV_CLOSE_PTS} · entry at that tick · Nifty TP +${V2_TP_INDEX_PTS} pts · Nifty SL −${V2_SL_INDEX_PTS} pts vs entry spot · option exit from archived LTP or ~${PAPER_WS_ATM_DELTA}× spot move`,
   };
 }
 

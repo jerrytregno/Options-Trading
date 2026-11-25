@@ -28,7 +28,7 @@ import {
 } from "./nine-sixteen-logic.js";
 import { fetchHistoricalCandles } from "./kite-candles.js";
 import { PAPER_STARTING_CASH } from "./paper-book.js";
-import { groupSessionBars, isCompleteSession, type MinuteBar } from "./session-bars.js";
+import { chunk, groupSessionBars, isCompleteSession, type MinuteBar } from "./session-bars.js";
 import { computeAffordableLots } from "./nine-sixteen-sizing.js";
 import { listNineFifteenMinuteTickDates } from "./nine-fifteen-minute-ticks.js";
 import {
@@ -51,7 +51,7 @@ function cacheFileFor(skipPrev329Gap: boolean): string {
   return skipPrev329Gap ? CACHE_FILE_NO_329 : CACHE_FILE;
 }
 const CACHE_MS = 30 * 60 * 1000;
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 const MINUTE_SESSION_CACHE_FILE = path.join(CACHE_DIR, "paper-ws-minute-sessions.json");
 const MINUTE_SESSION_CACHE_VERSION = 1;
 /** When the archived option tape has no tick at exit, map Nifty spot move → premium (ATM rough). */
@@ -74,7 +74,8 @@ export type PaperWsLoadedDay = PaperWsDayTicks & {
 /** Disk + Firestore morningWsTicks + upload index (includes Oct 5+ days only in the DB). */
 export async function listPaperWsTickDates(): Promise<string[]> {
   const dates = await listNineFifteenMinuteTickDates();
-  return [...dates].sort();
+  // An empty archive doc can exist for a Saturday; the market was shut, so it is not a skipped day.
+  return [...dates].filter((date) => !isWeekendIst(date)).sort();
 }
 
 function addCalendarDaysIst(dateKey: string, days: number): string {
@@ -347,22 +348,25 @@ function isWeekendIst(dateIst: string): boolean {
   return wd === 0 || wd === 6;
 }
 
-/** One full session per call — Kite rejects huge multi-week minute ranges; the live bot uses this shape. */
-async function fetchOneSessionDay(
+/**
+ * Kite caps one `minute` request at 60 days, so a single call across the whole tick archive comes
+ * back empty and every day then reports a missing 15:29 candle. Pull in trading-day chunks instead.
+ */
+const MINUTE_FETCH_CHUNK_DAYS = 40;
+
+async function fetchSessionRange(
   accessToken: string,
-  dateIst: string,
-): Promise<MinuteBar[] | null> {
-  if (isWeekendIst(dateIst)) return null;
+  fromDate: string,
+  toDate: string,
+): Promise<Map<string, MinuteBar[]>> {
   const { candles } = await fetchHistoricalCandles(
     accessToken,
     "NSE:NIFTY 50",
     "minute",
-    `${dateIst} 09:15:00`,
-    `${dateIst} 15:30:00`,
+    `${fromDate} 09:15:00`,
+    `${toDate} 15:30:00`,
   );
-  const bars = groupSessionBars(candles as unknown[][]).get(dateIst);
-  if (!bars || !isCompleteSession(bars)) return null;
-  return bars;
+  return groupSessionBars(candles as unknown[][]);
 }
 
 export async function loadPaperWsMinuteSessions(
@@ -380,33 +384,52 @@ export async function loadPaperWsMinuteSessions(
   if (!accessToken) return out;
   if (!minuteSessionsNeedKiteFetch(out, dates)) return out;
 
-  const toPull = new Set<string>();
-  for (const dateIst of dates) {
-    for (let back = 1; back <= 8; back += 1) {
-      const prev = addCalendarDaysIst(dateIst, -back);
-      if (isWeekendIst(prev)) continue;
-      const have = out.get(prev) ?? diskCache.get(prev);
-      if (have && isCompleteSession(have)) break;
-      toPull.add(prev);
+  // Every weekday from ten days before the first tick day, so each day has a prior session to read.
+  const wanted: string[] = [];
+  for (
+    let day = addCalendarDaysIst(dates[0]!, -10);
+    day <= dates[dates.length - 1]!;
+    day = addCalendarDaysIst(day, 1)
+  ) {
+    if (isWeekendIst(day)) continue;
+    const have = out.get(day);
+    if (have && isCompleteSession(have)) continue;
+    wanted.push(day);
+  }
+
+  for (const group of chunk(wanted, MINUTE_FETCH_CHUNK_DAYS)) {
+    if (group.length === 0) continue;
+    try {
+      const batch = await fetchSessionRange(accessToken, group[0]!, group[group.length - 1]!);
+      for (const [date, bars] of batch) {
+        if (!isCompleteSession(bars)) continue;
+        diskCache.set(date, bars);
+        out.set(date, bars);
+      }
+    } catch (err) {
+      console.error("[paper-ws-backtest] minute chunk failed", group[0], group[group.length - 1], err);
     }
   }
 
-  for (const day of [...toPull].sort()) {
-    const cached = diskCache.get(day);
-    if (cached && isCompleteSession(cached)) {
-      out.set(day, cached);
-      continue;
-    }
-    try {
-      const bars = await fetchOneSessionDay(accessToken, day);
-      if (bars) {
-        diskCache.set(day, bars);
-        out.set(day, bars);
+  // A day the chunk missed (holiday boundary, partial response) is worth one single-day retry.
+  for (const dateIst of dates) {
+    if (prevPaperWsSession(out, dateIst).prevClose != null) continue;
+    for (let back = 1; back <= 6; back += 1) {
+      const prev = addCalendarDaysIst(dateIst, -back);
+      if (isWeekendIst(prev) || out.has(prev)) continue;
+      try {
+        const bars = (await fetchSessionRange(accessToken, prev, prev)).get(prev);
+        if (bars && isCompleteSession(bars)) {
+          diskCache.set(prev, bars);
+          out.set(prev, bars);
+          break;
+        }
+      } catch (err) {
+        console.error("[paper-ws-backtest] single session fetch failed", prev, err);
       }
-    } catch (err) {
-      console.error("[paper-ws-backtest] session day fetch failed", day, err);
     }
   }
+
   writeMinuteSessionCache(diskCache);
   return out;
 }
@@ -418,10 +441,13 @@ export function prevPaperWsSession(
   for (let back = 1; back <= 8; back += 1) {
     const prev = addCalendarDaysIst(dateIst, -back);
     const bars = sessions.get(prev);
-    if (!bars) continue;
+    if (!bars || bars.length === 0) continue;
     const close = bars[bars.length - 1]?.close ?? 0;
-    const candle329 = bars.find((bar) => bar.mins === NINE_FIFTEEN_PREV_CANDLE_MINUTE);
-    if (!(close > 0) || !candle329) continue;
+    // Prefer the 15:29 bar; on a short session the last bar of the day is that final full minute.
+    const candle329 =
+      bars.find((bar) => bar.mins === NINE_FIFTEEN_PREV_CANDLE_MINUTE) ??
+      [...bars].reverse().find((bar) => bar.mins <= NINE_FIFTEEN_PREV_CANDLE_MINUTE);
+    if (!(close > 0) || !candle329 || !(candle329.open > 0) || !(candle329.close > 0)) continue;
     return { prevClose: close, prevCandle: { open: candle329.open, close: candle329.close } };
   }
   return { prevClose: null, prevCandle: null };
@@ -612,7 +638,12 @@ async function buildFresh(
   skipPrev329Gap: boolean,
 ): Promise<PaperWsBacktestResult> {
   const dates = await listPaperWsTickDates();
-  const sessions = await loadPaperWsMinuteSessions(accessToken, dates).catch(() => new Map<string, MinuteBar[]>());
+  let sessionsError: string | null = null;
+  const sessions = await loadPaperWsMinuteSessions(accessToken, dates).catch((err: unknown) => {
+    sessionsError = err instanceof Error ? err.message : "Kite minute history unavailable";
+    console.error("[paper-ws-backtest] minute sessions failed", err);
+    return new Map<string, MinuteBar[]>();
+  });
   const trades: PaperWsBacktestTrade[] = [];
   let cash = PAPER_STARTING_CASH;
 
@@ -630,6 +661,11 @@ async function buildFresh(
   const gapNote = skipPrev329Gap
     ? "15:29 ±1 pt gap filter is off (paper toggle). "
     : "Entry includes live 15:29 ±1 pt gap vs that candle close. ";
+  const prevDayNote = sessionsError
+    ? `Yesterday's 15:29 candle could not be loaded from Kite (${sessionsError}) — connect Kite and Refresh. `
+    : !accessToken
+      ? "Kite is not connected, so yesterday's 15:29 candle and 15:30 close are missing. "
+      : "";
 
   return {
     version: CACHE_VERSION,
@@ -640,7 +676,7 @@ async function buildFresh(
     endingCash: Math.round(cash * 100) / 100,
     closedPnl: Math.round(closedPnl * 100) / 100,
     builtAt: new Date().toISOString(),
-    note: `${gapNote}₹10,00,000 paper book, 9:15 only, on days with 9:15 websocket ticks (disk or morningWsTicks). Option exit uses archived LTP when present; otherwise ~${PAPER_WS_ATM_DELTA}× Nifty move from entry so P&L is not stuck at ₹0. Archive-only days replay through ~09:20; full disk files through 10:09.`,
+    note: `${prevDayNote}${gapNote}₹10,00,000 paper book, 9:15 only, on days with 9:15 websocket ticks (disk or morningWsTicks). Option exit uses archived LTP when present; otherwise ~${PAPER_WS_ATM_DELTA}× Nifty move from entry so P&L is not stuck at ₹0. Archive-only days replay through ~09:20; full disk files through 10:09.`,
   };
 }
 
